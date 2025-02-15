@@ -50,7 +50,7 @@ def schedule_backup():
     while True:
         backup_mongodb_and_upload()
         print("Waiting for the next backup...")
-        time.sleep(3600)  # Wait for 1 hour
+        time.sleep(10)  # Wait for 1 hour
 
 if __name__ == "__main__":
     schedule_backup()
