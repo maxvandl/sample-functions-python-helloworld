@@ -4,6 +4,10 @@ import subprocess
 import datetime
 import time
 import boto3
+import logging
+
+# Configure logging for DigitalOcean console output
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def backup_mongodb_and_upload():
     """Backup all MongoDB collections and upload to S3."""
@@ -18,7 +22,7 @@ def backup_mongodb_and_upload():
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 
     if not aws_access_key or not aws_secret_key:
-        print("Error: AWS credentials are not set.")
+        logging.error("AWS credentials are not set.")
         return {"error": "AWS credentials are missing."}
 
     backup_dir = "/tmp/mongo_backup"
@@ -29,6 +33,8 @@ def backup_mongodb_and_upload():
     os.makedirs(backup_dir, exist_ok=True)
 
     try:
+        logging.info("Starting MongoDB backup...")
+
         # Run mongodump
         dump_cmd = [
             "mongodump",
@@ -37,9 +43,10 @@ def backup_mongodb_and_upload():
             "--archive=" + backup_file
         ]
         subprocess.run(dump_cmd, check=True)
-        print(f"Backup created: {backup_file}")
+        logging.info(f"Backup created: {backup_file}")
 
         # Connect to S3
+        logging.info("Connecting to S3...")
         s3_client = boto3.client(
             "s3",
             aws_access_key_id=aws_access_key,
@@ -49,19 +56,19 @@ def backup_mongodb_and_upload():
         # Upload backup to S3
         s3_key = f"{s3_folder}/mongodump_{timestamp}.gz"
         s3_client.upload_file(backup_file, s3_bucket, s3_key)
-        print(f"Uploaded to S3: s3://{s3_bucket}/{s3_key}")
+        logging.info(f"Uploaded to S3: s3://{s3_bucket}/{s3_key}")
 
         # Cleanup
         os.remove(backup_file)
-        print("Local backup removed.")
+        logging.info("Local backup removed.")
 
         return {"message": "Backup successful", "s3_path": f"s3://{s3_bucket}/{s3_key}"}
 
     except subprocess.CalledProcessError as e:
-        print(f"Error during mongodump: {e}")
+        logging.error(f"Error during mongodump: {e}")
         return {"error": "mongodump failed", "details": str(e)}
     except Exception as e:
-        print(f"Error during S3 upload: {e}")
+        logging.error(f"Error during S3 upload: {e}")
         return {"error": "S3 upload failed", "details": str(e)}
 
 def main(args=None):
@@ -71,8 +78,9 @@ def main(args=None):
 def schedule_backup():
     """Run the backup every hour (for local execution)."""
     while True:
+        logging.info("Starting scheduled backup...")
         backup_mongodb_and_upload()
-        print("Waiting for the next backup...")
+        logging.info("Waiting for the next backup in 1 hour...")
         time.sleep(3600)  # Wait for 1 hour
 
 if __name__ == "__main__":
