@@ -5,12 +5,18 @@ import datetime
 import time
 import boto3
 import logging
+import traceback
 
-# Configure logging for DigitalOcean console output
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Configure logging for runtime logs in DigitalOcean console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 def backup_mongodb_and_upload():
     """Backup all MongoDB collections and upload to S3."""
+    start_time = time.time()  # Start time for execution duration
+
     # Get MongoDB settings from environment variables
     mongo_host = os.getenv("MONGO_HOST", "localhost")
     db_name = os.getenv("MONGO_DB_NAME", "your_database")
@@ -33,7 +39,7 @@ def backup_mongodb_and_upload():
     os.makedirs(backup_dir, exist_ok=True)
 
     try:
-        logging.info("Starting MongoDB backup...")
+        logging.info(f"Starting MongoDB backup at {timestamp}...")
 
         # Run mongodump
         dump_cmd = [
@@ -44,6 +50,10 @@ def backup_mongodb_and_upload():
         ]
         subprocess.run(dump_cmd, check=True)
         logging.info(f"Backup created: {backup_file}")
+
+        # Get file size
+        backup_size = os.path.getsize(backup_file) / (1024 * 1024)  # Convert to MB
+        logging.info(f"Backup file size: {backup_size:.2f} MB")
 
         # Connect to S3
         logging.info("Connecting to S3...")
@@ -62,13 +72,19 @@ def backup_mongodb_and_upload():
         os.remove(backup_file)
         logging.info("Local backup removed.")
 
-        return {"message": "Backup successful", "s3_path": f"s3://{s3_bucket}/{s3_key}"}
+        execution_time = time.time() - start_time  # Calculate execution duration
+        logging.info(f"Backup completed in {execution_time:.2f} seconds.")
+
+        return {"message": "Backup successful", "s3_path": f"s3://{s3_bucket}/{s3_key}", "duration": execution_time}
 
     except subprocess.CalledProcessError as e:
         logging.error(f"Error during mongodump: {e}")
+        logging.error(traceback.format_exc())  # Print full error trace
         return {"error": "mongodump failed", "details": str(e)}
+
     except Exception as e:
         logging.error(f"Error during S3 upload: {e}")
+        logging.error(traceback.format_exc())  # Print full error trace
         return {"error": "S3 upload failed", "details": str(e)}
 
 def main(args=None):
@@ -78,10 +94,11 @@ def main(args=None):
 def schedule_backup():
     """Run the backup every hour (for local execution)."""
     while True:
-        logging.info("Starting scheduled backup...")
+        logging.info("Starting scheduled backup process...")
         backup_mongodb_and_upload()
         logging.info("Waiting for the next backup in 1 hour...")
         time.sleep(3600)  # Wait for 1 hour
 
 if __name__ == "__main__":
+    logging.info("MongoDB Backup Script Started...")
     schedule_backup()
